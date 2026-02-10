@@ -12,6 +12,28 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+st.markdown("""
+    <style>
+    /* 1. HIDE STREAMLIT BRANDING (The "Premium" look) */
+    #MainMenu {visibility: hidden;} /* Hides the 3-dot menu at top right */
+    footer {visibility: hidden;}    /* Hides "Made with Streamlit" at bottom */
+    header {visibility: hidden;}    /* Hides the top red bar/deploy button */
+
+    /* 2. MAKE CHAT INPUT WIDER */
+    .stChatInput {
+        width: 100% !important;
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+    
+    /* Optional: Fix the input box position if it feels off */
+    [data-testid="stChatInput"] {
+        max-width: 1000px !important; /* Forces it to be wider */
+        margin: 0 auto; /* Centers it */
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 
 # --- CUSTOM CSS (The "Make it Pretty" Part) ---
 st.markdown("""
