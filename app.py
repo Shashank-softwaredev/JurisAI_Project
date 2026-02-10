@@ -95,8 +95,16 @@ with st.sidebar:
     st.markdown("<div style='text-align: center; font-size: 4rem;'>⚖️</div>", unsafe_allow_html=True)
     st.markdown("<h2 style='text-align: center; color: white;'>JurisAI</h2>", unsafe_allow_html=True)
     
-    with st.expander("🔐 Security & Keys", expanded=True):
-        api_key = st.text_input("Enter Gemini API Key:", type="password", help="Get this from Google AI Studio")
+        # --- API KEY AUTOMATION ---
+    try:
+        # This pulls the key from the "Secrets" you saved on Streamlit Cloud
+        api_key = st.secrets["GEMINI_API_KEY"]
+        st.sidebar.success("🔐 Security: Verified")
+    except FileNotFoundError:
+        # This handles the error if you run it locally without a secrets.toml file
+        st.sidebar.warning("⚠️ API Key not found in Secrets")
+        api_key = st.sidebar.text_input("Enter API Key manually:", type="password")
+
 
     st.markdown("### ⚙️ Preferences")
     language = st.selectbox("💬 Answer Language", ["English", "Hindi", "Kannada"])
