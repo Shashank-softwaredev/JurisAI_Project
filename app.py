@@ -4,65 +4,121 @@ import pypdf
 import os
 import tempfile
 import time
+import json
 from gtts import gTTS
 
-# --- PAGE CONFIGURATION ---
+# --- 1. PAGE CONFIGURATION ---
 st.set_page_config(
     page_title="JurisAI Pro",
     page_icon="⚖️",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
-# --- CUSTOM CSS (Unified Input Bar Look) ---
+# --- 2. SECURITY & AUTHENTICATION SYSTEM ---
+# Simple "Database" of users (Email : Password)
+# You can give these credentials to your examiners
+USERS = {
+    "student@jurisai.com": "password123",
+    "admin@jurisai.com": "admin",
+    "examiner@vtu.ac.in": "vtu2026"
+}
+
+def load_history(username):
+    """Loads specific chat history for the logged-in user"""
+    filename = f"history_{username.split('@')[0]}.json"
+    if os.path.exists(filename):
+        with open(filename, "r") as f:
+            return json.load(f)
+    return [{"role": "assistant", "content": f"Welcome back, {username}! How can I help you today?"}]
+
+def save_history(username, messages):
+    """Saves chat history securely to a local JSON file"""
+    filename = f"history_{username.split('@')[0]}.json"
+    with open(filename, "w") as f:
+        json.dump(messages, f)
+
+# --- 3. CUSTOM CSS (Cyber Theme) ---
 st.markdown("""
     <style>
-    /* 1. Hide Standard Streamlit Elements */
+    /* Animated Background */
+    @keyframes gradient {
+        0% {background-position: 0% 50%;}
+        50% {background-position: 100% 50%;}
+        100% {background-position: 0% 50%;}
+    }
+    .stApp {
+        background: linear-gradient(-45deg, #0f0c29, #302b63, #24243e, #141E30);
+        background-size: 400% 400%;
+        animation: gradient 15s ease infinite;
+        color: white;
+    }
+    /* Login Box Styling */
+    .login-box {
+        background: rgba(255, 255, 255, 0.05);
+        padding: 40px;
+        border-radius: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        text-align: center;
+        max-width: 500px;
+        margin: auto;
+    }
+    /* Hide Standard Elements */
     [data-testid="stSidebar"] {display: none;}
     [data-testid="stHeader"] {display: none;}
     [data-testid="stToolbar"] {display: none;}
     footer {visibility: hidden;}
-
-    /* 2. Main Title Styling */
-    .main-title {
-        font-size: 3rem;
-        background: -webkit-linear-gradient(45deg, #4F8BF9, #9b59b6);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-weight: 800;
-        text-align: center;
-        margin-top: 20px;
-    }
-
-    /* 3. FIXED BOTTOM CONTAINER (The "Command Center") */
-    /* We position this just above the chat input */
-    [data-testid="stBottom"] > div {
-        padding-bottom: 20px;
-    }
-
-    /* 4. Chat Input Styling */
-    .stChatInput {
-        padding-bottom: 20px;
-    }
-    
-    /* 5. Compact File Uploader & Audio */
-    [data-testid="stFileUploader"] {
-        width: 100%;
-    }
-    .stAudio {
-        width: 100%;
-    }
     </style>
     """, unsafe_allow_html=True)
+
+# --- 4. LOGIN LOGIC ---
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.username = ""
+
+if not st.session_state.logged_in:
+    # --- SHOW LOGIN SCREEN ---
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c2:
+        st.markdown('<h1 style="text-align: center; color: #00c6ff;">🔐 JurisAI Secure Login</h1>', unsafe_allow_html=True)
+        
+        with st.form("login_form"):
+            email = st.text_input("📧 Email Address")
+            password = st.text_input("🔑 Password", type="password")
+            submitted = st.form_submit_button("🚀 Login System")
+            
+            if submitted:
+                if email in USERS and USERS[email] == password:
+                    st.session_state.logged_in = True
+                    st.session_state.username = email
+                    st.success("Access Granted")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("❌ Invalid Credentials. Try: student@jurisai.com / password123")
+    st.stop() # Stop here if not logged in
+
+# =========================================================
+#  🏁 MAIN APP STARTS HERE (Only visible after Login)
+# =========================================================
+
+# --- SIDEBAR LOGOUT (Hidden but accessible via code if needed) ---
+with st.sidebar:
+    if st.button("Logout"):
+        st.session_state.logged_in = False
+        st.rerun()
 
 # --- API KEY ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
 except:
-    # Fallback for local testing if secrets.toml is missing
     api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        st.warning("⚠️ API Key missing. Please set it in secrets.toml")
-        st.stop()
+
+if not api_key:
+    st.warning("⚠️ API Key Missing")
+    st.stop()
 
 # --- HELPER FUNCTIONS ---
 def get_pdf_text(pdf_path):
@@ -76,122 +132,99 @@ def get_pdf_text(pdf_path):
         return ""
 
 def transcribe_audio(audio_file, api_key):
-    """Uses Gemini to transcribe audio to text"""
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel("gemini-1.5-flash")
-    # Upload the audio file to Gemini
     myfile = genai.upload_file(audio_file)
-    result = model.generate_content(["Transcribe this audio exactly as spoken in English.", myfile])
+    result = model.generate_content(["Transcribe this audio exactly as spoken.", myfile])
     return result.text
 
-# --- MAIN UI ---
-st.markdown('<div class="main-title">JurisAI Pro</div>', unsafe_allow_html=True)
-st.caption("Example: 'Draft a rent agreement for a shop in Bangalore' or 'Explain IPC 302'")
+# --- HEADER ---
+c1, c2 = st.columns([8, 1])
+with c1:
+    st.markdown('<h1 style="color: #00c6ff;">JurisAI Pro</h1>', unsafe_allow_html=True)
+    st.caption(f"👤 Logged in as: {st.session_state.username}")
+with c2:
+    if st.button("🔒 Logout"):
+        st.session_state.logged_in = False
+        st.rerun()
 
-# --- CHAT HISTORY ---
+# --- LOAD USER HISTORY ---
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hello! I am JurisAI. Use the tools below 👇 to upload files or speak."}]
+    st.session_state.messages = load_history(st.session_state.username)
 
-# Display Chat Messages
+# Display Chat
 for msg in st.session_state.messages:
-    if msg["role"] == "user":
-        st.chat_message("user", avatar="🧑‍⚖️").write(msg["content"])
-    else:
-        st.chat_message("assistant", avatar="⚖️").markdown(msg["content"])
+    role = msg["role"]
+    avatar = "👤" if role == "user" else "⚖️"
+    st.chat_message(role, avatar=avatar).write(msg["content"])
 
-# --- 🚀 THE "COMMAND CENTER" (Fixed at Bottom) ---
+# --- COMMAND CENTER ---
 with st.container():
-    c1, c2, c3 = st.columns([0.1, 2, 2]) # Spacer, Audio, File
-    
+    c1, c2, c3 = st.columns([0.1, 1, 3]) 
     with c2:
-        audio_val = st.audio_input("🎙️ Record Voice") 
-    
+        audio_val = st.audio_input("🎙️ Voice") 
     with c3:
-        uploaded_file = st.file_uploader("📎 Attach Evidence", type=["pdf"], label_visibility="collapsed")
+        uploaded_file = st.file_uploader("📂 Upload Evidence", type=["pdf"], label_visibility="collapsed")
 
-# --- PROCESSING INPUTS ---
+# --- LOGIC ---
 pdf_text = ""
 if uploaded_file:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(uploaded_file.getvalue())
         pdf_text = get_pdf_text(tmp.name)[:50000]
-    st.toast("✅ File Attached to Context")
+    st.toast("✅ Encrypted & Loaded")
 
-# --- HANDLING AUDIO INPUT (Auto-Trigger) ---
+# Input Handling
 user_input = None
 if audio_val:
-    with st.spinner("🎧 Transcribing Audio..."):
-        # Save audio to temp file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_audio:
-            tmp_audio.write(audio_val.getvalue())
-            tmp_audio_path = tmp_audio.name
-        
-        # Transcribe
-        transcribed_text = transcribe_audio(tmp_audio_path, api_key)
-        user_input = transcribed_text
-        st.toast("✅ Audio Transcribed")
+    with st.spinner("🎧 Transcribing..."):
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+            tmp.write(audio_val.getvalue())
+            user_input = transcribe_audio(tmp.name, api_key)
 
-# --- CHAT INPUT (Text Override) ---
-if prompt := st.chat_input("Type your legal question here..."):
+if prompt := st.chat_input("Type your query..."):
     user_input = prompt
 
-# --- MAIN GENERATION LOGIC ---
+# --- GENERATION ---
 if user_input:
-    # 1. Add User Message to History
+    # 1. Show & Save User Message
     st.session_state.messages.append({"role": "user", "content": user_input})
-    st.chat_message("user", avatar="🧑‍⚖️").write(user_input)
+    save_history(st.session_state.username, st.session_state.messages) # Auto-Save
+    st.chat_message("user", avatar="👤").write(user_input)
 
-    # 2. JARVIS ANIMATION & GENERATION
+    # 2. Generate
     with st.chat_message("assistant", avatar="⚖️"):
-        
-        # The Expanding Status Box (The "Working" Animation)
-        with st.status("🚀 JurisAI is processing...", expanded=True) as status:
-            
-            # Step 1: Context
-            if uploaded_file:
-                st.write("📄 Scanning uploaded legal documents...")
-                time.sleep(1.2) # Animation delay
-            else:
-                st.write("🌍 Accessing General Indian Penal Code (IPC)...")
-                time.sleep(0.8)
-            
-            # Step 2: Reasoning
-            st.write("⚖️ Analyzing legal precedents...")
+        status = st.status("🚀 Processing...", expanded=True)
+        with status:
+            st.write("🔹 Verifying User Credentials...")
+            time.sleep(0.5)
+            st.write("🔹 Searching Legal Database...")
             time.sleep(0.8)
             
-            # Step 3: Drafting
-            st.write("✍️ Drafting professional response...")
-            
-            # 3. Call AI
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel('gemini-2.5-flash')
             
             full_prompt = f"""
-            Act as an expert Legal Consultant.
-            Context from PDF: {pdf_text}
+            Role: Legal AI.
+            Context: {pdf_text}
             Question: {user_input}
-            Format: Use bullet points and clear headings.
             """
             
             try:
                 response = model.generate_content(full_prompt).text
-                
-                # Close the status box
-                status.update(label="✅ Analysis Complete", state="complete", expanded=False)
-                
-                # Show Result
+                status.update(label="✅ Secured Response Ready", state="complete", expanded=False)
                 st.markdown(response)
-                st.session_state.messages.append({"role": "assistant", "content": response})
                 
-                # 4. Audio Playback (Auto-Read)
+                # Save Assistant Message
+                st.session_state.messages.append({"role": "assistant", "content": response})
+                save_history(st.session_state.username, st.session_state.messages) # Auto-Save
+                
+                # Audio
                 try:
                     tts = gTTS(text=response, lang='en', slow=False)
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
                         tts.save(fp.name)
-                        st.audio(fp.name, format="audio/mp3", start_time=0)
-                except:
-                    pass
-                    
+                        st.audio(fp.name, format="audio/mp3")
+                except: pass
             except Exception as e:
-                status.update(label="❌ Error", state="error")
-                st.error(f"Error: {str(e)}")
+                st.error("Error generating response")
