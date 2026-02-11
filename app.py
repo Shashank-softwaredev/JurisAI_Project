@@ -3,6 +3,7 @@ import google.generativeai as genai
 import pypdf
 import os
 import tempfile
+import time
 from gtts import gTTS
 
 # --- PAGE CONFIGURATION ---
@@ -33,18 +34,9 @@ st.markdown("""
     }
 
     /* 3. FIXED BOTTOM CONTAINER (The "Command Center") */
-    .bottom-container {
-        position: fixed;
-        bottom: 80px; /* Sits right above the chat input */
-        left: 0;
-        width: 100%;
-        background-color: #0e1117; /* Matches dark theme */
-        padding: 10px 50px;
-        z-index: 99;
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
-        display: flex;
-        align-items: center;
-        gap: 10px;
+    /* We position this just above the chat input */
+    [data-testid="stBottom"] > div {
+        padding-bottom: 20px;
     }
 
     /* 4. Chat Input Styling */
@@ -66,8 +58,11 @@ st.markdown("""
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
 except:
-    st.warning("⚠️ API Key missing.")
-    st.stop()
+    # Fallback for local testing if secrets.toml is missing
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        st.warning("⚠️ API Key missing. Please set it in secrets.toml")
+        st.stop()
 
 # --- HELPER FUNCTIONS ---
 def get_pdf_text(pdf_path):
@@ -79,6 +74,15 @@ def get_pdf_text(pdf_path):
         return text
     except:
         return ""
+
+def transcribe_audio(audio_file, api_key):
+    """Uses Gemini to transcribe audio to text"""
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-1.5-flash")
+    # Upload the audio file to Gemini
+    myfile = genai.upload_file(audio_file)
+    result = model.generate_content(["Transcribe this audio exactly as spoken in English.", myfile])
+    return result.text
 
 # --- MAIN UI ---
 st.markdown('<div class="main-title">JurisAI Pro</div>', unsafe_allow_html=True)
@@ -96,17 +100,13 @@ for msg in st.session_state.messages:
         st.chat_message("assistant", avatar="⚖️").markdown(msg["content"])
 
 # --- 🚀 THE "COMMAND CENTER" (Fixed at Bottom) ---
-# We use a container to hold the file/audio tools just above the chat bar
 with st.container():
-    # Use columns to put Audio and File side-by-side
     c1, c2, c3 = st.columns([0.1, 2, 2]) # Spacer, Audio, File
     
     with c2:
-        # Audio Input (Standard Streamlit Widget)
         audio_val = st.audio_input("🎙️ Record Voice") 
     
     with c3:
-        # File Uploader
         uploaded_file = st.file_uploader("📎 Attach Evidence", type=["pdf"], label_visibility="collapsed")
 
 # --- PROCESSING INPUTS ---
@@ -117,28 +117,81 @@ if uploaded_file:
         pdf_text = get_pdf_text(tmp.name)[:50000]
     st.toast("✅ File Attached to Context")
 
+# --- HANDLING AUDIO INPUT (Auto-Trigger) ---
+user_input = None
 if audio_val:
-    st.toast("✅ Audio Recorded (Processing functionality pending)")
+    with st.spinner("🎧 Transcribing Audio..."):
+        # Save audio to temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_audio:
+            tmp_audio.write(audio_val.getvalue())
+            tmp_audio_path = tmp_audio.name
+        
+        # Transcribe
+        transcribed_text = transcribe_audio(tmp_audio_path, api_key)
+        user_input = transcribed_text
+        st.toast("✅ Audio Transcribed")
 
-# --- CHAT INPUT (Always at very bottom) ---
+# --- CHAT INPUT (Text Override) ---
 if prompt := st.chat_input("Type your legal question here..."):
-    
-    # 1. Add User Message to History
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    st.chat_message("user", avatar="🧑‍⚖️").write(prompt)
+    user_input = prompt
 
-    # 2. Generate Response
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-2.5-flash')
-    
-    full_prompt = f"""
-    Act as a Legal Consultant.
-    Context from PDF: {pdf_text}
-    Question: {prompt}
-    """
-    
+# --- MAIN GENERATION LOGIC ---
+if user_input:
+    # 1. Add User Message to History
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    st.chat_message("user", avatar="🧑‍⚖️").write(user_input)
+
+    # 2. JARVIS ANIMATION & GENERATION
     with st.chat_message("assistant", avatar="⚖️"):
-        with st.spinner("Analyzing..."):
-            response = model.generate_content(full_prompt).text
-            st.markdown(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
+        
+        # The Expanding Status Box (The "Working" Animation)
+        with st.status("🚀 JurisAI is processing...", expanded=True) as status:
+            
+            # Step 1: Context
+            if uploaded_file:
+                st.write("📄 Scanning uploaded legal documents...")
+                time.sleep(1.2) # Animation delay
+            else:
+                st.write("🌍 Accessing General Indian Penal Code (IPC)...")
+                time.sleep(0.8)
+            
+            # Step 2: Reasoning
+            st.write("⚖️ Analyzing legal precedents...")
+            time.sleep(0.8)
+            
+            # Step 3: Drafting
+            st.write("✍️ Drafting professional response...")
+            
+            # 3. Call AI
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            
+            full_prompt = f"""
+            Act as an expert Legal Consultant.
+            Context from PDF: {pdf_text}
+            Question: {user_input}
+            Format: Use bullet points and clear headings.
+            """
+            
+            try:
+                response = model.generate_content(full_prompt).text
+                
+                # Close the status box
+                status.update(label="✅ Analysis Complete", state="complete", expanded=False)
+                
+                # Show Result
+                st.markdown(response)
+                st.session_state.messages.append({"role": "assistant", "content": response})
+                
+                # 4. Audio Playback (Auto-Read)
+                try:
+                    tts = gTTS(text=response, lang='en', slow=False)
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
+                        tts.save(fp.name)
+                        st.audio(fp.name, format="audio/mp3", start_time=0)
+                except:
+                    pass
+                    
+            except Exception as e:
+                status.update(label="❌ Error", state="error")
+                st.error(f"Error: {str(e)}")
