@@ -5,101 +5,69 @@ import os
 import tempfile
 from gtts import gTTS
 
-# --- PAGE CONFIGURATION (Must be first) ---
+# --- PAGE CONFIGURATION ---
 st.set_page_config(
     page_title="JurisAI Pro",
     page_icon="⚖️",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
+
+# --- CUSTOM CSS (Unified Input Bar Look) ---
 st.markdown("""
     <style>
-    /* 1. HIDE STREAMLIT BRANDING (The "Premium" look) */
-    #MainMenu {visibility: hidden;} /* Hides the 3-dot menu at top right */
-    footer {visibility: hidden;}    /* Hides "Made with Streamlit" at bottom */
-    header {visibility: hidden;}    /* Hides the top red bar/deploy button */
+    /* 1. Hide Standard Streamlit Elements */
+    [data-testid="stSidebar"] {display: none;}
+    [data-testid="stHeader"] {display: none;}
+    [data-testid="stToolbar"] {display: none;}
+    footer {visibility: hidden;}
 
-    /* 2. MAKE CHAT INPUT WIDER */
-    .stChatInput {
-        width: 100% !important;
-        padding-left: 2rem;
-        padding-right: 2rem;
-    }
-    
-    /* Optional: Fix the input box position if it feels off */
-    [data-testid="stChatInput"] {
-        max-width: 1000px !important; /* Forces it to be wider */
-        margin: 0 auto; /* Centers it */
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-
-# --- CUSTOM CSS (The "Make it Pretty" Part) ---
-st.markdown("""
-    <style>
-    /* 1. Main Background - Dark Professional Blue/Black */
-    .stApp {
-        background: linear-gradient(135deg, #0e1117 0%, #161b22 100%);
-    }
-
-    /* 2. Sidebar - Glassmorphism Effect */
-    [data-testid="stSidebar"] {
-        background-color: rgba(22, 27, 34, 0.8);
-        border-right: 1px solid rgba(255, 255, 255, 0.1);
-    }
-
-    /* 3. Title Typography - Gradient Glow */
+    /* 2. Main Title Styling */
     .main-title {
-        font-size: 3.5rem;
-        font-weight: 800;
+        font-size: 3rem;
         background: -webkit-linear-gradient(45deg, #4F8BF9, #9b59b6);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
+        font-weight: 800;
         text-align: center;
-        margin-bottom: 0px;
-        padding-bottom: 10px;
-        text-shadow: 0 0 30px rgba(79, 139, 249, 0.3);
-    }
-    .sub-title {
-        font-size: 1.2rem;
-        color: #a0aab9;
-        text-align: center;
-        margin-bottom: 30px;
-        font-weight: 300;
-        letter-spacing: 1px;
+        margin-top: 20px;
     }
 
-    /* 4. Chat Input - Fixed at Bottom */
-    .stChatInput {
+    /* 3. FIXED BOTTOM CONTAINER (The "Command Center") */
+    .bottom-container {
         position: fixed;
-        bottom: 20px;
-        z-index: 100;
+        bottom: 80px; /* Sits right above the chat input */
+        left: 0;
+        width: 100%;
+        background-color: #0e1117; /* Matches dark theme */
+        padding: 10px 50px;
+        z-index: 99;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    /* 4. Chat Input Styling */
+    .stChatInput {
+        padding-bottom: 20px;
     }
     
-    /* 5. Custom Buttons */
-    .stButton > button {
-        background: linear-gradient(90deg, #4F8BF9 0%, #3a6cc2 100%);
-        color: white;
-        border: none;
-        padding: 10px 20px;
-        border-radius: 8px;
-        font-weight: 600;
-        transition: all 0.3s ease;
+    /* 5. Compact File Uploader & Audio */
+    [data-testid="stFileUploader"] {
+        width: 100%;
     }
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(79, 139, 249, 0.4);
-    }
-    
-    /* 6. Success/Info Messages */
-    .stSuccess, .stInfo {
-        background-color: rgba(28, 33, 40, 0.6) !important;
-        border: 1px solid rgba(79, 139, 249, 0.2);
-        color: #e6edf3 !important;
+    .stAudio {
+        width: 100%;
     }
     </style>
     """, unsafe_allow_html=True)
+
+# --- API KEY ---
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+except:
+    st.warning("⚠️ API Key missing.")
+    st.stop()
 
 # --- HELPER FUNCTIONS ---
 def get_pdf_text(pdf_path):
@@ -109,117 +77,68 @@ def get_pdf_text(pdf_path):
         for page in reader.pages:
             text += page.extract_text() + "\n"
         return text
-    except Exception as e:
+    except:
         return ""
 
-# --- SIDEBAR DESIGN ---
-with st.sidebar:
-    st.markdown("<div style='text-align: center; font-size: 4rem;'>⚖️</div>", unsafe_allow_html=True)
-    st.markdown("<h2 style='text-align: center; color: white;'>JurisAI</h2>", unsafe_allow_html=True)
-    
-        # --- API KEY AUTOMATION ---
-    try:
-        # This pulls the key from the "Secrets" you saved on Streamlit Cloud
-        api_key = st.secrets["GEMINI_API_KEY"]
-        st.sidebar.success("🔐 Security: Verified")
-    except FileNotFoundError:
-        # This handles the error if you run it locally without a secrets.toml file
-        st.sidebar.warning("⚠️ API Key not found in Secrets")
-        api_key = st.sidebar.text_input("Enter API Key manually:", type="password")
-
-
-    st.markdown("### ⚙️ Preferences")
-    language = st.selectbox("💬 Answer Language", ["English", "Hindi", "Kannada"])
-    enable_audio = st.toggle("🔊 Read Aloud", value=False)
-    
-    st.markdown("### 📂 Evidence/Case File")
-    uploaded_file = st.file_uploader("Upload Legal PDF", type="pdf", label_visibility="collapsed")
-    
-    # Status Indicator
-    pdf_text = ""
-    if uploaded_file:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            tmp.write(uploaded_file.getvalue())
-            pdf_text = get_pdf_text(tmp.name)[:50000]
-        st.success(f"📄 Loaded: {uploaded_file.name}")
-    elif os.path.exists("law_data.pdf"):
-        pdf_text = get_pdf_text("law_data.pdf")[:50000]
-        st.info("📚 Using Default Knowledge Base")
-    else:
-        st.warning("⚠️ No documents found. Using General AI.")
-
-# --- MAIN UI LAYOUT ---
+# --- MAIN UI ---
 st.markdown('<div class="main-title">JurisAI Pro</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">Your Advanced AI Legal Consultant • VTU Project 2026</div>', unsafe_allow_html=True)
-st.markdown("---")
+st.caption("Example: 'Draft a rent agreement for a shop in Bangalore' or 'Explain IPC 302'")
 
-# --- BACKEND LOGIC ---
-def get_response(history, query, context, api_key, lang):
-    if not api_key: return "⚠️ **System Alert:** Please enter your API Key in the sidebar to proceed."
-    
-    try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
-        
-        prompt = f"""
-        Role: Expert Legal Consultant (JurisAI).
-        Task: Answer the user question in {lang}.
-        
-        Guidelines:
-        1. Base your answer on the PDF CONTEXT provided below.
-        2. If the answer is missing from the PDF, use your GENERAL LEGAL KNOWLEDGE.
-        3. Structure your answer with clear headings and bullet points.
-        4. Be professional, empathetic, and precise.
-
-        PDF CONTEXT:
-        {context}
-
-        CONVERSATION HISTORY:
-        {history}
-
-        USER QUESTION:
-        {query}
-        """
-        
-        response = model.generate_content(prompt)
-        return response.text
-
-    except Exception as e:
-        return f"❌ **Error:** {str(e)}"
-
-# --- CHAT INTERFACE ---
+# --- CHAT HISTORY ---
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hello! I am JurisAI. I can analyze case files, explain laws, or draft legal notices. How can I assist you today?"}]
+    st.session_state.messages = [{"role": "assistant", "content": "Hello! I am JurisAI. Use the tools below 👇 to upload files or speak."}]
 
-# Display Chat History with Avatars
+# Display Chat Messages
 for msg in st.session_state.messages:
     if msg["role"] == "user":
         st.chat_message("user", avatar="🧑‍⚖️").write(msg["content"])
     else:
         st.chat_message("assistant", avatar="⚖️").markdown(msg["content"])
 
-# Handle User Input
-if prompt := st.chat_input(f"Ask a question in {language}..."):
-    # 1. Show User Message
-    st.chat_message("user", avatar="🧑‍⚖️").write(prompt)
-    st.session_state.messages.append({"role": "user", "content": prompt})
+# --- 🚀 THE "COMMAND CENTER" (Fixed at Bottom) ---
+# We use a container to hold the file/audio tools just above the chat bar
+with st.container():
+    # Use columns to put Audio and File side-by-side
+    c1, c2, c3 = st.columns([0.1, 2, 2]) # Spacer, Audio, File
     
+    with c2:
+        # Audio Input (Standard Streamlit Widget)
+        audio_val = st.audio_input("🎙️ Record Voice") 
+    
+    with c3:
+        # File Uploader
+        uploaded_file = st.file_uploader("📎 Attach Evidence", type=["pdf"], label_visibility="collapsed")
+
+# --- PROCESSING INPUTS ---
+pdf_text = ""
+if uploaded_file:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp.write(uploaded_file.getvalue())
+        pdf_text = get_pdf_text(tmp.name)[:50000]
+    st.toast("✅ File Attached to Context")
+
+if audio_val:
+    st.toast("✅ Audio Recorded (Processing functionality pending)")
+
+# --- CHAT INPUT (Always at very bottom) ---
+if prompt := st.chat_input("Type your legal question here..."):
+    
+    # 1. Add User Message to History
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.chat_message("user", avatar="🧑‍⚖️").write(prompt)
+
     # 2. Generate Response
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-2.5-flash')
+    
+    full_prompt = f"""
+    Act as a Legal Consultant.
+    Context from PDF: {pdf_text}
+    Question: {prompt}
+    """
+    
     with st.chat_message("assistant", avatar="⚖️"):
-        with st.spinner("🔍 Analyzing legal statutes..."):
-            history_text = str(st.session_state.messages[-4:])
-            response = get_response(history_text, prompt, pdf_text, api_key, language)
-            
+        with st.spinner("Analyzing..."):
+            response = model.generate_content(full_prompt).text
             st.markdown(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
-            
-            # 3. Audio Playback
-            if enable_audio:
-                try:
-                    lang_code = {"English": "en", "Hindi": "hi", "Kannada": "kn"}.get(language, "en")
-                    tts = gTTS(text=response, lang=lang_code, slow=False)
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
-                        tts.save(fp.name)
-                        st.audio(fp.name, format="audio/mp3")
-                except:
-                    pass
