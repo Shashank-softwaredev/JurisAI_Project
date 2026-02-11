@@ -87,8 +87,57 @@ elif os.path.exists("law_data.pdf"):
     pdf_text = get_pdf_text("law_data.pdf")[:50000]
 
 # --- 5. MAIN CHAT INTERFACE ---
-st.markdown('<div class="main-title">JurisAI Pro</div>', unsafe_allow_html=True)
-st.caption("Example: 'Draft a rental agreement' or 'Explain Section 302 IPC'")
+st.markdown("""
+    <style>
+    /* --- 1. HIDE STREAMLIT BRANDING (The "Nuclear" Option) --- */
+    
+    /* Hides the top header bar completely */
+    [data-testid="stHeader"] {
+        display: none !important;
+    }
+    
+    /* Hides the "Deploy" button and the 3-dot menu */
+    [data-testid="stToolbar"] {
+        display: none !important;
+    }
+    
+    /* Hides the specific "Deploy" button if it remains */
+    [data-testid="stDeployButton"] {
+        display: none !important;
+    }
+    
+    /* Hides the "Stop/Running" animation in top right */
+    [data-testid="stStatusWidget"] {
+        display: none !important;
+    }
+    
+    /* Hides the footer "Made with Streamlit" */
+    footer {
+        display: none !important;
+    }
+    
+    /* Hides the colored line at the top of the screen */
+    [data-testid="stDecoration"] {
+        display: none !important;
+    }
+
+    /* --- 2. MAKE CHAT INPUT WIDER --- */
+    
+    /* This forces the chat input to ignore the default width limit */
+    .stChatInput {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    
+    /* This targets the bottom container to ensure it stretches to the edges */
+    [data-testid="stBottom"] > div {
+        width: 100% !important;
+        max-width: 100% !important;
+        padding-left: 2rem;   /* Adds a little breathing room on the left */
+        padding-right: 2rem;  /* Adds a little breathing room on the right */
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 # Initialize History
 if "messages" not in st.session_state:
